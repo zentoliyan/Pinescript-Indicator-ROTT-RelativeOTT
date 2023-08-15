@@ -1,0 +1,126 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © zeubetella
+
+// The system was designed by Mr. Anıl Özeksi, and I just adapted it to TradingView.
+// I would like to express my sincere gratitude to @dg_factor for his contributions.
+
+//@version=5
+indicator(title="Zeubetella | ROTT - Relative OTT", shorttitle = "ROTT", overlay=false)
+
+// dg_factor hocanın yorumları için v82.0'a bakılabilir.
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+group_1 = "Parameters"
+group_2 = "OTT Settings"
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+X1 = input(30,   tooltip = "The standart value is 30", group = group_1)
+X2 = input(1000, title = "VAR Length", tooltip = "The standart value is 1000 \nCan be decreased / increased by step value of 100", group = group_1)
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+f_var(data,u1) =>
+    a = 9
+    b = data > data[1] ? data - data[1] : 0
+    c = data < data[1] ? data[1] - data : 0
+    d = math.sum(b , a)
+    e = math.sum(c , a)
+    f = nz((d - e) / (d + e))
+    g = math.abs(f)
+    h = 2 / (u1 + 1)
+    x = ta.sma(data , u1)
+    vidya = 0.0
+    vidya :=
+     u1==1 ? data : na(vidya[1]) ? x :
+     g * h * (data - nz(vidya[1])) + nz(vidya[1])
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   
+perfect_ma2 = 2 * f_var(close , X2)
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+OTT(source, length, percent) =>
+    MAVG = f_var(source, length)
+    fark = MAVG * percent * 0.01
+    longStop = MAVG - fark
+    longStopPrev = nz(longStop[1], longStop)
+    longStop := MAVG > longStopPrev ? math.max(longStop, longStopPrev) : longStop
+    shortStop = MAVG + fark
+    shortStopPrev = nz(shortStop[1], shortStop)
+    shortStop := MAVG < shortStopPrev ? math.min(shortStop, shortStopPrev) : shortStop
+    dir = 1
+    dir := nz(dir[1], dir)
+    dir := dir == -1 and MAVG > shortStopPrev ? 1 : dir == 1 and MAVG < longStopPrev ? -1 : dir
+    MT = dir == 1 ? longStop : shortStop
+    OTT = MAVG > MT ? MT * (200 + percent) / 200 : MT * (200 - percent) / 200
+    out = nz(OTT[2])
+
+length_ott  = input.int(30,    'OTT Period',  minval=1, tooltip = "The standart value is same with the X1 parameter", group = group_2)
+percent_ott = input.float(7.0, 'OTT Percent', step=0.1, minval=0, tooltip = "The standart value is 7",                group = group_2)
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ott = OTT(perfect_ma2 , length_ott , percent_ott)
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+bar_cond0 = ta.barssince(ta.crossover(perfect_ma2 , ott))
+bar_cond1 = ta.barssince(ta.crossover(ott , perfect_ma2))
+
+//
+
+plot1 = plot(perfect_ma2, color= color.new(#31e7ff, 0),  title="SUPPORT")
+plot2 = plot(ott,         color= color.rgb(217, 0, 255), title="ROTT")
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+rawNumberforTable1 = 5
+//
+var string TableGroup1 = "Table | Settings"
+//
+string  Table1PosInYaxis = input.string("bottom", 
+                             title = "Table Position", 
+                             inline = "1", 
+                             options = ["top", "middle", "bottom"], 
+                             group = TableGroup1)
+//
+string  Table1PosInXaxis = input.string("right", 
+                             " / ", 
+                             inline = "1", 
+                             options = ["left", "center", "right"], 
+                             group = TableGroup1)
+//
+var table table1 = table.new(Table1PosInYaxis + "_" + Table1PosInXaxis, 
+                             2, 
+                             rawNumberforTable1 + 1, 
+                             frame_color =  color.rgb(0, 0, 0), 
+                             frame_width = 1,
+                             border_color = color.rgb(0, 0, 0), 
+                             border_width = 1)
+//
+textstyleFORtable1 = input.string(size.small, 
+                             "Text Size", 
+                             options=[size.small, size.normal, size.large], 
+                             group = TableGroup1)
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+if perfect_ma2 > ott
+    table.cell(table1, 0, 0, "BUY",  text_halign = text.align_center, text_size = textstyleFORtable1, bgcolor = color.white)
+if perfect_ma2 < ott
+    table.cell(table1, 0, 0, "SELL", text_halign = text.align_center, text_size = textstyleFORtable1, bgcolor = color.yellow)
+
+//
+
+if perfect_ma2 > ott
+    table.cell(table1, 0, 1, str.tostring(bar_cond0) + " Candle", text_halign = text.align_center, text_size= textstyleFORtable1, bgcolor = color.white)
+if perfect_ma2 < ott
+    table.cell(table1, 0, 1, str.tostring(bar_cond1) + " Candle", text_halign = text.align_center, text_size= textstyleFORtable1, bgcolor = color.yellow)
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// kod bitiş, afiyet olsun. 
+// end of the code, bon appetit.
